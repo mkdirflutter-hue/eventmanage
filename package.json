@@ -1,0 +1,23 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/Shourya10-ai/eventmanage#readme",
+  "bugs": {
+    "url": "https://github.com/Shourya10-ai/eventmanage/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shourya10-ai/eventmanage.git"
+  },
+  "license": "ISC",
+  "author": "shourya and raj",
+  "type": "commonjs",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

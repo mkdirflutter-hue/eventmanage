@@ -1,0 +1,19 @@
+.uc-header{
+  height:64px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 16px;
+  background:linear-gradient(90deg,#111827, #0f172a);
+  color:#fff;
+}
+.uc-hamburger{display:none;background:transparent;border:0;color:#fff;font-size:20px}
+.uc-brand{font-weight:700;font-size:18px}
+.uc-header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.uc-search{padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#fff}
+.uc-avatar{width:36px;height:36px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700}
+
+@media(max-width:800px){
+  .uc-hamburger{display:block}
+  .uc-search{display:none}
+}

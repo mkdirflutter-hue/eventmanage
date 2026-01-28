@@ -2,12 +2,17 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { auth, db } from '@/lib/firebase'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -15,12 +20,53 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // Firebase authentication will be integrated here
-      console.log('[v0] Login attempt:', { email })
-      // Placeholder for now
-      setError('Firebase integration in progress. Please complete environment setup.')
+      // Sign in with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+
+      // Get user data from Firestore users collection
+      const userDoc = await getDoc(doc(db, 'users', user.uid))
+      
+      if (!userDoc.exists()) {
+        setError('User profile not found. Please contact support.')
+        return
+      }
+
+      const userData = userDoc.data()
+      
+      // Check if user is approved
+      if (userData.status === 'pending') {
+        setError('Your account is pending approval. Please wait for admin approval.')
+        return
+      }
+
+      if (userData.status === 'rejected') {
+        setError('Your account has been rejected. Please contact support.')
+        return
+      }
+
+      // Redirect based on role
+      const role = userData.role || 'student'
+      if (role === 'admin') {
+        router.push('/dashboard/admin')
+      } else if (role === 'organizer') {
+        router.push('/dashboard/organizer')
+      } else {
+        router.push('/dashboard/student')
+      }
     } catch (err: any) {
-      setError(err.message || 'Login failed')
+      console.error('Login error:', err)
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email.')
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password.')
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Invalid email address.')
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password.')
+      } else {
+        setError(err.message || 'Login failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

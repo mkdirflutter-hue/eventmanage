@@ -2,6 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { auth, db } from '@/lib/firebase'
+import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -12,11 +16,14 @@ export default function RegisterPage() {
     role: 'student',
   })
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match')
@@ -31,11 +38,40 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      // Firebase authentication will be integrated here
-      console.log('[v0] Registration attempt:', { ...formData, password: '***' })
-      setError('Firebase integration in progress. Please complete environment setup.')
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password)
+      const user = userCredential.user
+
+      // Create user document in Firestore users collection
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        status: formData.role === 'student' ? 'approved' : 'pending', // Students auto-approved, organizers need approval
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+
+      if (formData.role === 'organizer') {
+        setSuccess('Account created successfully! Please wait for admin approval before logging in.')
+      } else {
+        setSuccess('Account created successfully! Redirecting to login...')
+        setTimeout(() => {
+          router.push('/login')
+        }, 2000)
+      }
     } catch (err: any) {
-      setError(err.message || 'Registration failed')
+      console.error('Registration error:', err)
+      if (err.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists.')
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Invalid email address.')
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak. Please use a stronger password.')
+      } else {
+        setError(err.message || 'Registration failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -68,6 +104,12 @@ export default function RegisterPage() {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+                {success}
               </div>
             )}
 

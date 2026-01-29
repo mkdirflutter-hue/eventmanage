@@ -74,7 +74,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onToggleSidebar={() => setCollapsed((s) => !s)} userName={userData.displayName} />
+      <Header onToggleSidebar={() => setCollapsed((s) => !s)} userName={userData.name} />
       <div className="flex">
         <Sidebar collapsed={collapsed} role={role} />
         <main className="flex-1 p-6 overflow-auto">{children}</main>

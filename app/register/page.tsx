@@ -6,13 +6,29 @@ import { useRouter } from 'next/navigation'
 import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore'
 
+// SHA-256 hash function for password storage
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  return hashHex
+}
+
+// Generate unique user ID
+function generateUid(role: string): string {
+  const randomStr = Math.random().toString(36).substring(2, 15)
+  return `${role.toLowerCase()}_${randomStr}`
+}
+
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    displayName: '',
+    name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'Student',
+    role: 'student',
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -49,19 +65,26 @@ export default function RegisterPage() {
       }
 
       // Generate a unique ID for the user
-      const newUserRef = doc(collection(db, 'users'))
+      const uid = generateUid(formData.role)
+      const newUserRef = doc(db, 'users', uid)
+      
+      // Hash the password
+      const passwordHash = await hashPassword(formData.password)
+      const now = Date.now()
       
       // Create user document directly in Firestore users collection
       await setDoc(newUserRef, {
-        displayName: formData.displayName,
+        uid: uid,
+        name: formData.name,
         email: formData.email.toLowerCase(),
-        password: formData.password, // Store password directly in Firestore
+        passwordHash: passwordHash,
         role: formData.role,
-        status: formData.role === 'Student' ? 'approved' : 'pending', // Students auto-approved, organizers need approval
-        createdAt: Date.now(),
+        status: formData.role === 'student' ? 'approved' : 'pending',
+        createdAt: now,
+        updatedAt: now,
       })
 
-      if (formData.role === 'Organizer') {
+      if (formData.role === 'organizer') {
         setSuccess('Account created successfully! Please wait for admin approval before logging in.')
       } else {
         setSuccess('Account created successfully! Redirecting to login...')
@@ -114,15 +137,15 @@ export default function RegisterPage() {
             )}
 
             <div>
-              <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name
               </label>
               <input
-                id="displayName"
+                id="name"
                 type="text"
                 required
-                value={formData.displayName}
-                onChange={(e) => updateFormData('displayName', e.target.value)}
+                value={formData.name}
+                onChange={(e) => updateFormData('name', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                 placeholder="John Doe"
               />
@@ -153,8 +176,8 @@ export default function RegisterPage() {
                 onChange={(e) => updateFormData('role', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               >
-                <option value="Student">Student</option>
-                <option value="Organizer">Event Organizer</option>
+                <option value="student">Student</option>
+                <option value="organizer">Event Organizer</option>
               </select>
             </div>
 

@@ -5,11 +5,21 @@ import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import { useRouter, usePathname } from 'next/navigation'
 
+// SHA-256 hash function for password comparison
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  return hashHex
+}
+
 export interface UserData {
   uid: string
-  displayName: string
+  name: string
   email: string
-  role: 'Admin' | 'Organizer' | 'Student'
+  role: 'admin' | 'organizer' | 'student'
   status: 'pending' | 'approved' | 'rejected'
   clubId?: string
   createdAt?: number
@@ -39,9 +49,9 @@ interface AuthProviderProps {
 
 const PUBLIC_PATHS = ['/', '/login', '/register']
 const ROLE_DASHBOARDS: Record<string, string> = {
-  Admin: '/dashboard/admin',
-  Organizer: '/dashboard/organizer',
-  Student: '/dashboard/student',
+  admin: '/dashboard/admin',
+  organizer: '/dashboard/organizer',
+  student: '/dashboard/student',
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -64,10 +74,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (userDoc.exists()) {
             const freshData = userDoc.data()
             const updatedUser: UserData = {
-              uid: userDoc.id,
-              displayName: freshData.displayName || '',
+              uid: freshData.uid || userDoc.id,
+              name: freshData.name || '',
               email: freshData.email || '',
-              role: freshData.role || 'Student',
+              role: freshData.role || 'student',
               status: freshData.status || 'pending',
               clubId: freshData.clubId,
               createdAt: freshData.createdAt,
@@ -119,8 +129,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userDoc = querySnapshot.docs[0]
       const data = userDoc.data()
 
-      // Check password (stored in Firestore)
-      if (data.password !== password) {
+      // Hash the input password and compare with stored passwordHash
+      const hashedPassword = await hashPassword(password)
+      if (data.passwordHash !== hashedPassword) {
         return { success: false, error: 'Incorrect password.' }
       }
 
@@ -135,10 +146,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Create user data
       const loggedInUser: UserData = {
-        uid: userDoc.id,
-        displayName: data.displayName || '',
+        uid: data.uid || userDoc.id,
+        name: data.name || '',
         email: data.email || '',
-        role: data.role || 'Student',
+        role: data.role || 'student',
         status: data.status || 'approved',
         clubId: data.clubId,
         createdAt: data.createdAt,
@@ -168,14 +179,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!userData) return
 
     try {
-      const userDoc = await getDoc(doc(db, 'users', userData.uid))
-      if (userDoc.exists()) {
+      // Query by uid field since document ID might differ
+      const usersRef = collection(db, 'users')
+      const q = query(usersRef, where('uid', '==', userData.uid))
+      const querySnapshot = await getDocs(q)
+      
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0]
         const freshData = userDoc.data()
         const updatedUser: UserData = {
-          uid: userDoc.id,
-          displayName: freshData.displayName || '',
+          uid: freshData.uid || userDoc.id,
+          name: freshData.name || '',
           email: freshData.email || '',
-          role: freshData.role || 'Student',
+          role: freshData.role || 'student',
           status: freshData.status || 'pending',
           clubId: freshData.clubId,
           createdAt: freshData.createdAt,

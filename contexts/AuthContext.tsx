@@ -64,15 +64,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const checkSession = async () => {
       const storedUser = localStorage.getItem('eventapp_user')
+      console.log('[v0] AuthContext checkSession - storedUser:', storedUser)
       
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser) as UserData
-          // Verify user still exists in Firestore
-          const userDoc = await getDoc(doc(db, 'users', parsedUser.uid))
+          console.log('[v0] AuthContext checkSession - parsedUser:', parsedUser)
           
-          if (userDoc.exists()) {
+          // Query by uid field instead of document ID
+          const usersRef = collection(db, 'users')
+          const q = query(usersRef, where('uid', '==', parsedUser.uid))
+          const querySnapshot = await getDocs(q)
+          
+          if (!querySnapshot.empty) {
+            const userDoc = querySnapshot.docs[0]
             const freshData = userDoc.data()
+            console.log('[v0] AuthContext checkSession - freshData:', freshData)
             const updatedUser: UserData = {
               uid: freshData.uid || userDoc.id,
               name: freshData.name || '',
@@ -85,12 +92,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setUserData(updatedUser)
             localStorage.setItem('eventapp_user', JSON.stringify(updatedUser))
           } else {
+            console.log('[v0] AuthContext checkSession - user not found in Firestore')
             // User no longer exists, clear session
             localStorage.removeItem('eventapp_user')
             setUserData(null)
           }
         } catch (error) {
-          console.error('Error checking session:', error)
+          console.error('[v0] AuthContext checkSession error:', error)
           localStorage.removeItem('eventapp_user')
           setUserData(null)
         }
@@ -116,11 +124,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [userData, loading, pathname, router])
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    console.log('[v0] AuthContext login - attempting login for:', email)
     try {
       // Query Firestore users collection by email
       const usersRef = collection(db, 'users')
       const q = query(usersRef, where('email', '==', email.toLowerCase()))
       const querySnapshot = await getDocs(q)
+      console.log('[v0] AuthContext login - found users:', querySnapshot.size)
 
       if (querySnapshot.empty) {
         return { success: false, error: 'No account found with this email.' }
@@ -156,11 +166,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       // Store in localStorage and state
+      console.log('[v0] AuthContext login - storing user:', loggedInUser)
       localStorage.setItem('eventapp_user', JSON.stringify(loggedInUser))
       setUserData(loggedInUser)
 
       // Redirect to appropriate dashboard
-      router.push(ROLE_DASHBOARDS[loggedInUser.role] || '/dashboard/student')
+      const dashboardPath = ROLE_DASHBOARDS[loggedInUser.role] || '/dashboard/student'
+      console.log('[v0] AuthContext login - redirecting to:', dashboardPath)
+      router.push(dashboardPath)
 
       return { success: true }
     } catch (error) {

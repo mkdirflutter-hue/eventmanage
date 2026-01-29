@@ -16,6 +16,8 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
   const { userData, loading } = useAuth()
   const router = useRouter()
 
+  console.log('[v0] DashboardLayout - loading:', loading, 'userData:', userData, 'role prop:', role)
+
   // Show loading state
   if (loading) {
     return (
@@ -40,7 +42,8 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
   }
 
   // Check role access (case-insensitive comparison)
-  const userRole = userData.role.toLowerCase()
+  const userRole = userData.role?.toLowerCase() || ''
+  console.log('[v0] DashboardLayout - userRole:', userRole, 'expected role:', role)
   if (userRole !== role) {
     router.push(`/dashboard/${userRole}`)
     return (

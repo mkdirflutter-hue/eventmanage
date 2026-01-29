@@ -13,7 +13,7 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children, role }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
-  const { user, userData, loading } = useAuth()
+  const { userData, loading } = useAuth()
   const router = useRouter()
 
   // Show loading state
@@ -25,8 +25,8 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
     )
   }
 
-  // Redirect if not authenticated or wrong role
-  if (!user || !userData) {
+  // Redirect if not authenticated
+  if (!userData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -39,9 +39,10 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
     )
   }
 
-  // Check role access
-  if (userData.role !== role) {
-    router.push(`/dashboard/${userData.role}`)
+  // Check role access (case-insensitive comparison)
+  const userRole = userData.role.toLowerCase()
+  if (userRole !== role) {
+    router.push(`/dashboard/${userRole}`)
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -50,7 +51,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
   }
 
   // Check if user is approved (except for admin who might not need approval)
-  if (userData.status !== 'approved' && userData.role !== 'admin') {
+  if (userData.status !== 'approved' && userRole !== 'admin') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md p-6">
@@ -61,7 +62,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
           </div>
           <h2 className="text-xl font-semibold text-foreground mb-2">Account Pending Approval</h2>
           <p className="text-muted-foreground mb-4">
-            Your account is awaiting admin approval. You'll be notified once it's approved.
+            Your account is awaiting admin approval. You will be notified once it is approved.
           </p>
           <a href="/login" className="px-4 py-2 bg-muted text-foreground rounded-lg inline-block">
             Back to Login
@@ -73,7 +74,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onToggleSidebar={() => setCollapsed((s) => !s)} userName={userData.name} />
+      <Header onToggleSidebar={() => setCollapsed((s) => !s)} userName={userData.displayName} />
       <div className="flex">
         <Sidebar collapsed={collapsed} role={role} />
         <main className="flex-1 p-6 overflow-auto">{children}</main>

@@ -2,74 +2,27 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { auth, db } from '@/lib/firebase'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    try {
-      // Sign in with Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      const user = userCredential.user
-
-      // Get user data from Firestore users collection
-      const userDoc = await getDoc(doc(db, 'users', user.uid))
-      
-      if (!userDoc.exists()) {
-        setError('User profile not found. Please contact support.')
-        return
-      }
-
-      const userData = userDoc.data()
-      
-      // Check if user is approved
-      if (userData.status === 'pending') {
-        setError('Your account is pending approval. Please wait for admin approval.')
-        return
-      }
-
-      if (userData.status === 'rejected') {
-        setError('Your account has been rejected. Please contact support.')
-        return
-      }
-
-      // Redirect based on role
-      const role = userData.role || 'student'
-      if (role === 'admin') {
-        router.push('/dashboard/admin')
-      } else if (role === 'organizer') {
-        router.push('/dashboard/organizer')
-      } else {
-        router.push('/dashboard/student')
-      }
-    } catch (err: any) {
-      console.error('Login error:', err)
-      if (err.code === 'auth/user-not-found') {
-        setError('No account found with this email.')
-      } else if (err.code === 'auth/wrong-password') {
-        setError('Incorrect password.')
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Invalid email address.')
-      } else if (err.code === 'auth/invalid-credential') {
-        setError('Invalid email or password.')
-      } else {
-        setError(err.message || 'Login failed. Please try again.')
-      }
-    } finally {
-      setLoading(false)
+    const result = await login(email, password)
+    
+    if (!result.success) {
+      setError(result.error || 'Login failed')
     }
+    
+    setLoading(false)
   }
 
   return (
@@ -124,7 +77,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                placeholder="••••••••"
+                placeholder="Enter your password"
               />
             </div>
 
@@ -133,9 +86,6 @@ export default function LoginPage() {
                 <input type="checkbox" className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                 <span className="text-sm text-gray-600">Remember me</span>
               </label>
-              <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
-                Forgot password?
-              </Link>
             </div>
 
             <button
@@ -159,7 +109,7 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center">
           <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">
-            ← Back to Home
+            Back to Home
           </Link>
         </div>
       </div>

@@ -3,17 +3,16 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { auth, db } from '@/lib/firebase'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    name: '',
+    displayName: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'student',
+    role: 'Student',
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -38,22 +37,31 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password)
-      const user = userCredential.user
+      // Check if email already exists in Firestore
+      const usersRef = collection(db, 'users')
+      const q = query(usersRef, where('email', '==', formData.email.toLowerCase()))
+      const querySnapshot = await getDocs(q)
 
-      // Create user document in Firestore users collection
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        name: formData.name,
-        email: formData.email,
+      if (!querySnapshot.empty) {
+        setError('An account with this email already exists.')
+        setLoading(false)
+        return
+      }
+
+      // Generate a unique ID for the user
+      const newUserRef = doc(collection(db, 'users'))
+      
+      // Create user document directly in Firestore users collection
+      await setDoc(newUserRef, {
+        displayName: formData.displayName,
+        email: formData.email.toLowerCase(),
+        password: formData.password, // Store password directly in Firestore
         role: formData.role,
-        status: formData.role === 'student' ? 'approved' : 'pending', // Students auto-approved, organizers need approval
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        status: formData.role === 'Student' ? 'approved' : 'pending', // Students auto-approved, organizers need approval
+        createdAt: Date.now(),
       })
 
-      if (formData.role === 'organizer') {
+      if (formData.role === 'Organizer') {
         setSuccess('Account created successfully! Please wait for admin approval before logging in.')
       } else {
         setSuccess('Account created successfully! Redirecting to login...')
@@ -63,15 +71,7 @@ export default function RegisterPage() {
       }
     } catch (err: any) {
       console.error('Registration error:', err)
-      if (err.code === 'auth/email-already-in-use') {
-        setError('An account with this email already exists.')
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Invalid email address.')
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password is too weak. Please use a stronger password.')
-      } else {
-        setError(err.message || 'Registration failed. Please try again.')
-      }
+      setError(err.message || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -114,15 +114,15 @@ export default function RegisterPage() {
             )}
 
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name
               </label>
               <input
-                id="name"
+                id="displayName"
                 type="text"
                 required
-                value={formData.name}
-                onChange={(e) => updateFormData('name', e.target.value)}
+                value={formData.displayName}
+                onChange={(e) => updateFormData('displayName', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                 placeholder="John Doe"
               />
@@ -153,8 +153,8 @@ export default function RegisterPage() {
                 onChange={(e) => updateFormData('role', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               >
-                <option value="student">Student</option>
-                <option value="organizer">Event Organizer</option>
+                <option value="Student">Student</option>
+                <option value="Organizer">Event Organizer</option>
               </select>
             </div>
 
@@ -169,7 +169,7 @@ export default function RegisterPage() {
                 value={formData.password}
                 onChange={(e) => updateFormData('password', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                placeholder="••••••••"
+                placeholder="Enter your password"
               />
             </div>
 
@@ -184,7 +184,7 @@ export default function RegisterPage() {
                 value={formData.confirmPassword}
                 onChange={(e) => updateFormData('confirmPassword', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                placeholder="••••••••"
+                placeholder="Confirm your password"
               />
             </div>
 
@@ -209,7 +209,7 @@ export default function RegisterPage() {
 
         <div className="mt-6 text-center">
           <Link href="/" className="text-gray-600 hover:text-gray-900 font-medium">
-            ← Back to Home
+            Back to Home
           </Link>
         </div>
       </div>

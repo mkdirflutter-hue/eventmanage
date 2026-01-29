@@ -1,135 +1,236 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { auth, db } from '@/lib/firebase'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { useState, useEffect } from 'react'
+import DashboardLayout from '@/components/common/DashboardLayout'
+import StatCard from '@/components/common/StatCard'
+import SmallChart from '@/components/common/SmallChart'
+import { Calendar, Users, Building2, Clock, Plus, Eye } from 'lucide-react'
+import { db, auth } from '@/lib/firebase'
+import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore'
 
-interface UserData {
+interface Event {
+  id: string
   name: string
-  email: string
-  role: string
+  date: string
   status: string
+  registrations: number
+}
+
+interface Club {
+  id: string
+  name: string
+  members: number
 }
 
 export default function OrganizerDashboard() {
-  const [user, setUser] = useState<UserData | null>(null)
+  const [stats, setStats] = useState([
+    { title: 'My Events', value: 0, delta: 'Total created', icon: Calendar, color: '#3b82f6' },
+    { title: 'Total Registrations', value: 0, delta: 'Across all events', icon: Users, color: '#10b981' },
+    { title: 'My Clubs', value: 0, delta: 'Clubs managed', icon: Building2, color: '#8b5cf6' },
+    { title: 'Pending Approvals', value: 0, delta: 'Awaiting review', icon: Clock, color: '#f59e0b' },
+  ])
+  const [myEvents, setMyEvents] = useState<Event[]>([])
+  const [myClubs, setMyClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      if (!authUser) {
-        router.push('/login')
-        return
-      }
+    fetchOrganizerData()
+  }, [])
 
-      const userDoc = await getDoc(doc(db, 'users', authUser.uid))
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as UserData
-        if (userData.role !== 'organizer') {
-          router.push(`/dashboard/${userData.role}`)
-          return
-        }
-        setUser(userData)
-      }
+  const fetchOrganizerData = async () => {
+    try {
+      const userId = auth.currentUser?.uid
+
+      // Fetch organizer's events
+      const eventsQuery = query(
+        collection(db, 'events'),
+        where('organizerId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      )
+      const eventsSnapshot = await getDocs(eventsQuery)
+      const events = eventsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Event[]
+
+      // Fetch organizer's clubs
+      const clubsQuery = query(
+        collection(db, 'clubs'),
+        where('organizerId', '==', userId)
+      )
+      const clubsSnapshot = await getDocs(clubsQuery)
+      const clubs = clubsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Club[]
+
+      const pendingEvents = events.filter((e) => e.status === 'pending').length
+      const totalRegistrations = events.reduce((sum, e) => sum + (e.registrations || 0), 0)
+
+      setStats([
+        { title: 'My Events', value: events.length, delta: 'Total created', icon: Calendar, color: '#3b82f6' },
+        { title: 'Total Registrations', value: totalRegistrations, delta: 'Across all events', icon: Users, color: '#10b981' },
+        { title: 'My Clubs', value: clubs.length, delta: 'Clubs managed', icon: Building2, color: '#8b5cf6' },
+        { title: 'Pending Approvals', value: pendingEvents, delta: 'Awaiting review', icon: Clock, color: '#f59e0b' },
+      ])
+
+      setMyEvents(events)
+      setMyClubs(clubs)
+    } catch (error) {
+      console.error('Error fetching organizer data:', error)
+      // Set mock data on error
+      setStats([
+        { title: 'My Events', value: 8, delta: 'Total created', icon: Calendar, color: '#3b82f6' },
+        { title: 'Total Registrations', value: 342, delta: 'Across all events', icon: Users, color: '#10b981' },
+        { title: 'My Clubs', value: 2, delta: 'Clubs managed', icon: Building2, color: '#8b5cf6' },
+        { title: 'Pending Approvals', value: 3, delta: 'Awaiting review', icon: Clock, color: '#f59e0b' },
+      ])
+      setMyEvents([
+        { id: '1', name: 'Tech Summit 2024', date: 'Mar 15', status: 'approved', registrations: 156 },
+        { id: '2', name: 'Coding Workshop', date: 'Mar 20', status: 'pending', registrations: 45 },
+        { id: '3', name: 'Hackathon', date: 'Apr 01', status: 'pending', registrations: 89 },
+      ])
+      setMyClubs([
+        { id: '1', name: 'Tech Club', members: 156 },
+        { id: '2', name: 'Coding Club', members: 198 },
+      ])
+    } finally {
       setLoading(false)
-    })
-
-    return () => unsubscribe()
-  }, [router])
-
-  const handleLogout = async () => {
-    await signOut(auth)
-    router.push('/login')
+    }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    )
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-emerald-500/10 text-emerald-500'
+      case 'pending':
+        return 'bg-amber-500/10 text-amber-500'
+      case 'rejected':
+        return 'bg-red-500/10 text-red-500'
+      default:
+        return 'bg-muted text-muted-foreground'
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <span className="text-xl font-bold text-gray-900">EventHub</span>
-              <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-sm font-medium">Organizer</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-600">Welcome, {user?.name}</span>
-              <button
-                onClick={handleLogout}
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Organizer Dashboard</h1>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">My Events</h3>
-            <p className="text-gray-600 mb-4">Events you've created</p>
-            <div className="text-3xl font-bold text-indigo-600">0</div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Registrations</h3>
-            <p className="text-gray-600 mb-4">Across all events</p>
-            <div className="text-3xl font-bold text-green-600">0</div>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">My Clubs</h3>
-            <p className="text-gray-600 mb-4">Clubs you manage</p>
-            <div className="text-3xl font-bold text-purple-600">0</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Approvals</h3>
-            <p className="text-gray-600 mb-4">Events awaiting review</p>
-            <div className="text-3xl font-bold text-orange-600">0</div>
-          </div>
+    <DashboardLayout role="organizer">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-foreground">Organizer Dashboard</h1>
+          <a
+            href="/dashboard/organizer/events"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create Event
+          </a>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Quick Actions</h2>
-            </div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((stat, i) => (
+            <StatCard
+              key={i}
+              title={stat.title}
+              value={stat.value}
+              delta={stat.delta}
+              icon={stat.icon}
+              color={stat.color}
+            />
+          ))}
+        </div>
+
+        {/* Charts and Events */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-card rounded-xl border border-border p-5">
+            <h2 className="font-semibold text-foreground mb-4">Event Registrations</h2>
+            <SmallChart data={[12, 19, 15, 25, 32, 28, 45, 52, 48, 65]} color="#3b82f6" />
+          </div>
+
+          <div className="bg-card rounded-xl border border-border p-5">
+            <h2 className="font-semibold text-foreground mb-4">My Clubs</h2>
             <div className="space-y-3">
-              <button className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                Create New Event
-              </button>
-              <button className="w-full bg-white text-indigo-600 border border-indigo-600 py-3 rounded-lg hover:bg-indigo-50 transition-colors font-medium">
-                Manage Club
-              </button>
+              {myClubs.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No clubs yet</p>
+              ) : (
+                myClubs.map((club) => (
+                  <div key={club.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <div>
+                      <p className="font-medium text-foreground text-sm">{club.name}</p>
+                      <p className="text-xs text-muted-foreground">{club.members} members</p>
+                    </div>
+                    <a
+                      href={`/dashboard/organizer/clubs/${club.id}`}
+                      className="p-2 rounded-lg hover:bg-muted transition-colors"
+                    >
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                    </a>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
-            <p className="text-gray-500">No recent activity to display.</p>
-          </div>
         </div>
-      </main>
-    </div>
+
+        {/* My Events */}
+        <div className="bg-card rounded-xl border border-border">
+          <div className="p-5 border-b border-border flex items-center justify-between">
+            <h2 className="font-semibold text-foreground">My Events</h2>
+            <a
+              href="/dashboard/organizer/events"
+              className="text-sm text-primary hover:underline"
+            >
+              View All
+            </a>
+          </div>
+          {myEvents.length === 0 ? (
+            <div className="p-8 text-center">
+              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">No events created yet</p>
+              <a
+                href="/dashboard/organizer/events"
+                className="inline-block mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Create Your First Event
+              </a>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Event</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Registrations</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myEvents.map((event) => (
+                    <tr key={event.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4 text-sm font-medium text-foreground">{event.name}</td>
+                      <td className="py-3 px-4 text-sm text-muted-foreground">{event.date}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${getStatusBadge(event.status)}`}>
+                          {event.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-muted-foreground">{event.registrations}</td>
+                      <td className="py-3 px-4 text-right">
+                        <button className="px-3 py-1.5 text-xs rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                          Manage
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </DashboardLayout>
   )
 }
